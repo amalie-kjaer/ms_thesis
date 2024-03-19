@@ -1,0 +1,6 @@
+get_pointcloud_test.py
+extract-clip.ipynb
+ai_001_001_instances.ply
+ai_001_001_semantic.ply
+ai_001_001.ply
+scene_dict_new.json

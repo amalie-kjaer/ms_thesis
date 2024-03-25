@@ -10,20 +10,39 @@ import argparse
 import json
 from operator import add
 
+# TODO: Add top-k frame-views for each instance to the scene_dict
+# TODO: Add camera position and rotation to load_frame_data
+# TODO: Make each scene a class (with n frames), with methods to load scene data, load frame data, process data, and visualize data
+
 def load_scene_data(download_dir, scene_name, cam_name):
     # Load all scene-specific data
-    ins_bb_pos_path = os.path.join(
+    bb_x_world_path = os.path.join(
         download_dir,
         scene_name,
         "_detail/mesh/metadata_semantic_instance_bounding_box_object_aligned_2d_positions.hdf5"
         )
-    with h5py.File(ins_bb_pos_path, "r") as f: ins_bb_pos = f['dataset'][:]
+    with h5py.File(bb_x_world_path, "r") as f: bb_x_world = f['dataset'][:]
+
+    bb_extents_world_path = os.path.join(
+        download_dir,
+        scene_name,
+        "_detail/mesh/metadata_semantic_instance_bounding_box_object_aligned_2d_extents.hdf5"
+        )
+    with h5py.File(bb_extents_world_path, "r") as f: bb_extents_world = f['dataset'][:]
+
+    bb_rot_world_path = os.path.join(
+        download_dir,
+        scene_name,
+        "_detail/mesh/metadata_semantic_instance_bounding_box_object_aligned_2d_orientations.hdf5")
+    with h5py.File(bb_rot_world_path, "r") as f: bb_rot_world = f['dataset'][:]
     
     scene_data = {
         'download_dir': download_dir,
         'scene_name': scene_name,
         'cam_name': cam_name,
-        'ins_bb_pos': ins_bb_pos
+        'bb_x_world': bb_x_world,
+        'bb_extents_world': bb_extents_world,
+        'bb_rot_world': bb_rot_world
         }
     
     return scene_data
@@ -61,7 +80,7 @@ def load_frame_data(scene_data, frame_idx):
     with h5py.File(ins_seg_path, "r") as f:
         ins_seg = f['dataset'][:]
 
-    # Load 3d coordinates for the frame
+    # Load 3d coordinates of each pixel for the frame (used to construct point cloud of the scene)
     X_3d_path = os.path.join(
         scene_data['download_dir'],
         scene_data['scene_name'],
@@ -70,10 +89,31 @@ def load_frame_data(scene_data, frame_idx):
         "frame." + frame_idx + ".position.hdf5")
     with h5py.File(X_3d_path, "r") as f: X_3d = f['dataset'][:]
     
+    camera_pos_dir = os.path.join(
+        scene_data['download_dir'],
+        scene_data['scene_name'],
+        "_detail",
+        scene_data['cam_name'],
+        "camera_keyframe_positions.hdf5")
+    with h5py.File(camera_pos_dir, "r") as f: camera_pos_all = f['dataset'][:]
+    i = int(frame_idx.lstrip('0')) if frame_idx.lstrip('0') else 0
+    cam_pos = camera_pos_all[i]
+
+    camera_rot_dir = os.path.join(
+        scene_data['download_dir'],
+        scene_data['scene_name'],
+        "_detail",
+        scene_data['cam_name'],
+        "camera_keyframe_orientations.hdf5")
+    with h5py.File(camera_rot_dir, "r") as f: camera_rot_all = f['dataset'][:]
+    cam_rot = camera_rot_all[i]
+
     frame_data = {
         'tonemap': tonemap,
         'semantic_nyu': semantic_nyu,
         'ins_seg': ins_seg,
+        'cam_pos': cam_pos,
+        'cam_rot': cam_rot,
         'X_3d': X_3d
     }
 
@@ -95,7 +135,7 @@ def collect_instance_information(scene_data, frame_data, ins, new_instance=True)
 
     if new_instance:
         class_id = frame_data['semantic_nyu'][frame_data['ins_seg']==ins][0]
-        bb_centre_3d = scene_data['ins_bb_pos'][ins]
+        bb_centre_3d = scene_data['bb_x_world'][ins]
         instance_dict = {
             "instance_id": int(ins),
             "class_id": int(class_id),
@@ -122,6 +162,14 @@ def get_clip_embedding(x, type="image"):
             features = model.encode_text(text)
     return features
 
+def calculate_total_view_score(view):
+    pass
+
+def check_visibility(view):
+    pass
+
+def calculate_size_score(view):
+    pass
 
 def process_scene(scene_data):
     json_path = "scene_dict_new.json"
@@ -147,6 +195,10 @@ def process_scene(scene_data):
                 "scene_" + scene_data['cam_name'] + "_final_preview"
                 )
             )
+
+        # TODO: Add another for loop here.
+        # For each instance, calculate the top-k frame-views and add to scene_dict[instances][ins]["top_views"]
+        # Then, calculate average CLIP embedding for each instance using the top-k frame-views (change code below accordingly)
 
         for f in frames_in_scene:
             
@@ -187,7 +239,7 @@ def process_scene(scene_data):
 
     return scene_dict
 
-def visualize_instance(scene_data, instance_id):
+def visualize_instance_2d(scene_data, instance_id):
     frames_in_scene = os.listdir(
             os.path.join(
                 scene_data['download_dir'],
@@ -255,7 +307,7 @@ def main(args):
             predicted_instance = k
             print(f'Predicted instance: {predicted_instance} with probability {torch.max(preds)}')
 
-    visualize_instance(scene_data, predicted_instance)
+    visualize_instance_2d(scene_data, predicted_instance)
     
 
 

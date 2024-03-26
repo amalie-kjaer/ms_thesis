@@ -115,6 +115,7 @@ def load_frame_data(scene_data, frame_idx):
         'cam_pos': cam_pos,
         'cam_rot': cam_rot,
         'X_3d': X_3d
+        # instance scores
     }
 
     return frame_data
